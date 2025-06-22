@@ -28,19 +28,80 @@ function degrees_to_radians(degrees) {
 
 // Create basketball court
 function createBasketballCourt() {
-  // Court floor - just a simple brown surface
-  const courtGeometry = new THREE.BoxGeometry(30, 0.2, 15);
-  const courtMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0xc68642,  // Brown wood color
-    shininess: 50
+  const loader = new THREE.TextureLoader();
+  const woodTexture = loader.load('/textures/wood.jpg', () => {
+    woodTexture.wrapS = THREE.ClampToEdgeWrapping;
+    woodTexture.wrapT = THREE.ClampToEdgeWrapping;
+    woodTexture.repeat.set(1, 1);
   });
-  const court = new THREE.Mesh(courtGeometry, courtMaterial);
+
+  // 1) Court box
+  const courtGeo = new THREE.BoxGeometry(30, 0.2, 15);
+  const courtMat = new THREE.MeshPhongMaterial({ map: woodTexture, shininess: 30 });
+  const court    = new THREE.Mesh(courtGeo, courtMat);
   court.receiveShadow = true;
   scene.add(court);
-  
-  // Note: All court lines, hoops, and other elements have been removed
-  // Students will need to implement these features
+
+  const topY = 0.2 / 2;       // half the box height
+  const lineThickness = 0.02; // thickness for all lines
+
+  // 2) Center line (across the width)
+  const midLineGeo = new THREE.BoxGeometry(0.1, lineThickness, 15);
+  const midLineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const midLine    = new THREE.Mesh(midLineGeo, midLineMat);
+  midLine.position.set(0, topY + lineThickness/2, 0);
+  scene.add(midLine);
+
+  // 3) Center circle
+  const circleGeo    = new THREE.TorusGeometry(2.5, 0.05, 16, 100);
+  const circleMat    = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const centerCircle = new THREE.Mesh(circleGeo, circleMat);
+  centerCircle.rotation.x = -Math.PI / 2;
+  centerCircle.position.set(0, topY + 0.05, 0);
+  scene.add(centerCircle);
+
+  // 4) Three-point arcs at each end
+  const halfCourt        = 30 / 2;
+  const basketOffset     = 1;      // how far the hoop is in from the baseline
+  const threePointRadius = 7.5;    // your chosen 3-pt distance
+  const arcY             = topY + lineThickness/2;
+
+  [  halfCourt - basketOffset,   // right hoop X
+    -halfCourt + basketOffset    // left hoop X
+  ].forEach(centerX => {
+    const isRight   = centerX > 0;
+    const startAng  = Math.PI / 2;    // +Z side
+    const endAng    = -Math.PI / 2;   // -Z side
+    // draw clockwise on the left, counter-clockwise on the right
+    const clockwise = isRight ? false : true;
+
+    // build the raw half-circle
+    const arcCurve = new THREE.ArcCurve(
+      centerX, 0,
+      threePointRadius,
+      startAng, endAng,
+      clockwise
+    );
+
+    // sample and lift into XZ, shifting right arc out by basketOffset
+    const pts = arcCurve.getPoints(64).map(p => {
+      const shiftX = isRight ?  basketOffset
+                            : -basketOffset;
+      return new THREE.Vector3(
+        p.x + shiftX,   // now p.x = endpoint at ±halfCourt
+        arcY,
+        p.y
+      );
+    });
+
+    const arcGeo  = new THREE.BufferGeometry().setFromPoints(pts);
+    const arcMat  = new THREE.LineBasicMaterial({ color: 0xffffff });
+    const arcLine = new THREE.Line(arcGeo, arcMat);
+    scene.add(arcLine);
+  });
 }
+
+
 
 // Create all elements
 createBasketballCourt();

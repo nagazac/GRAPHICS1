@@ -13,6 +13,9 @@ const port = 8000
 
 app.use("/src", express.static(__dirname + "/src"));
 
+// serve your textures folder so that GET /textures/wood.jpg resolves
+app.use('/textures', express.static(path.join(__dirname, 'textures')));
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '/index.html'));
   })
