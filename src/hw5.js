@@ -282,43 +282,55 @@ function addHoopsToScene() {
 
 class Basketball {
   constructor(options = {}) {
-    this.radius = options.radius || 0.3;  // NBA size radius ~0.3m
-    this.position = options.position || { x: 0, y: null, z: 0 };
+    this.radius      = options.radius      || 0.3;
+    this.position    = options.position    || { x:0, y:null, z:0 };
     this.floorOffset = options.floorOffset || 0.1;
+    this.texturePath = options.texturePath || '/textures/Basketball.jpg';
   }
 
   create() {
     const ball = new THREE.Group();
+    const loader = new THREE.TextureLoader();
 
-    // Load external realistic basketball texture
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('/textures/Basketball.jpg');
+    // Load and configure the texture so it wraps exactly twice
+    const texture = loader.load(this.texturePath, tex => {
+      tex.wrapS = THREE.RepeatWrapping;   // enable horizontal repeating
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.repeat.set(2, 1);               // two copies around the equator
+    });
 
-    const geometry = new THREE.SphereGeometry(this.radius, 64, 64);
-    const material = new THREE.MeshStandardMaterial({
-      map: texture,
+    // Create the sphere with that texture
+    const geo = new THREE.SphereGeometry(this.radius, 64, 64);
+    const mat = new THREE.MeshStandardMaterial({
+      map:       texture,
       roughness: 0.7,
       metalness: 0.05
     });
 
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow    = true;
     mesh.receiveShadow = true;
     ball.add(mesh);
 
-    const y = this.position.y !== null ? this.position.y : this.radius + this.floorOffset;
+    // lift it off the floor
+    const y = this.position.y !== null
+      ? this.position.y
+      : this.radius + this.floorOffset;
     ball.position.set(this.position.x, y, this.position.z);
 
     return ball;
   }
 
   static create(scene, options = {}) {
-    const basketball = new Basketball(options);
-    const mesh = basketball.create();
-    scene.add(mesh);
-    return mesh;
+    const b = new Basketball(options);
+    const m = b.create();
+    scene.add(m);
+    return m;
   }
 }
+
+// Usage — each hemisphere will show one copy of your small texture:
+Basketball.create(scene, { texturePath: '/textures/Basketball.jpg' });
 
 function addBall() {
   return Basketball.create(scene);
