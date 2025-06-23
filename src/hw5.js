@@ -114,15 +114,10 @@ function createCourtCanvasTexture(callback) {
     drawHalfCourt(canvas.width, true);
 
     // Logo IDC au centre
-    const logoW = canvas.width * 0.18;
-    const logoH = canvas.height * 0.5;
-    ctx.drawImage(
-      logoImage,
-      (canvas.width - logoW) / 2,
-      (canvas.height - logoH) / 2,
-      logoW,
-      logoH
-    );
+    const logoDiameter = 320; // taille idéale pour s’inscrire dans le cercle central de rayon 180
+    const logoX = (canvas.width - logoDiameter) / 2;
+    const logoY = (canvas.height - logoDiameter) / 2;
+    ctx.drawImage(logoImage, logoX, logoY, logoDiameter, logoDiameter);
 
     const texture = new THREE.CanvasTexture(canvas);
     callback(texture);
