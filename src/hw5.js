@@ -455,84 +455,85 @@ function createJumbotron() {
   scene.add(group);
 }
 
+
+function createSeatModel(color) {
+  const group = new THREE.Group();
+
+  // Seat pan
+  const panGeo = new THREE.BoxGeometry(0.6, 0.1, 0.5);
+  const panMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const pan = new THREE.Mesh(panGeo, panMat);
+  pan.position.y = 0.25;
+  pan.castShadow = true;
+  group.add(pan);
+
+  // Backrest
+  const backGeo = new THREE.BoxGeometry(0.6, 0.5, 0.1);
+  const back = new THREE.Mesh(backGeo, panMat);
+  back.position.set(0, 0.55, -0.2);
+  back.castShadow = true;
+  group.add(back);
+
+  return group;
+}
+
 // Gradins circulaires
 function createAudienceRings() {
-  const seatGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-  const matBlue  = new THREE.MeshStandardMaterial({ color: 0x0033aa });
-  const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const seatsPerRow = 60;
+  const rowSpacing  = 0.3;
+  const lowerRows   = 20;
+  const upperRows   = 20;
+  const lowerRadius = 18;
+  const bowlGap     = 2.0;
 
-  // Configuration
-  const seatsPerRow   = 60;    // number of seats around the circle
-  const rowSpacing    = 0.3;   // radial + vertical spacing per row
-  const lowerRows     = 20;    // rows in lower bowl
-  const upperRows     = 20;    // rows in upper bowl
-  const lowerRadius   = 18;    // distance from center to first lower row
-  const bowlGap       = 2.0;   // gap between lower and upper bowls
-
-  // Helper to build one bowl
   function buildBowl(rowCount, startRadius, yOffset) {
-    const groupSize = 5;  // seats per color block
-
     for (let i = 0; i < rowCount; i++) {
       const radius = startRadius + i * rowSpacing;
-      const y      = yOffset      + i * rowSpacing;
+      const y      = yOffset + i * rowSpacing;
 
       for (let j = 0; j < seatsPerRow; j++) {
         const angle = (j / seatsPerRow) * Math.PI * 2;
         const x     = Math.cos(angle) * radius;
         const z     = Math.sin(angle) * radius;
 
-        // Alternate blocks of seats blue/white
-        const mat = (Math.floor(j / groupSize) % 2 === 0) ? matBlue : matWhite;
+        // Alternate blue/white blocks of 5 seats
+        const color = (Math.floor(j / 5) % 2 === 0) ? 0x0033aa : 0xffffff;
+        const seatModel = createSeatModel(color);
 
-        const seat = new THREE.Mesh(seatGeo, mat);
-        seat.position.set(x, y, z);
-        seat.lookAt(0, y, 0);
-        seat.castShadow = true;
-        scene.add(seat);
+        seatModel.position.set(x, y, z);
+        seatModel.lookAt(0, y, 0);
+        scene.add(seatModel);
       }
     }
   }
 
-  // Lower bowl (closest to court)
-  buildBowl(
-    lowerRows,
-    lowerRadius,
-    /* yOffset */ 0.5
-  );
-
-  // Upper bowl (steeper, set back)
-  buildBowl(
-    upperRows,
-    lowerRadius + lowerRows * rowSpacing + bowlGap,
-    /* yOffset */ 0.5 + lowerRows * rowSpacing + bowlGap * 0.5
-  );
+  // Lower bowl
+  buildBowl(lowerRows, lowerRadius,                   /* yOffset */ 0.5);
+  // Upper bowl
+  buildBowl(upperRows, lowerRadius + lowerRows*rowSpacing + bowlGap,
+                     /* yOffset */ 0.5 + lowerRows*rowSpacing + bowlGap*0.5);
 }
 
 function createCourtsideSeats() {
-  const seatGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-  const seatMat = new THREE.MeshStandardMaterial({ color: 0x0033aa }); // bright Magic-blue
-
-  // Match your court box (30×15m)
-  const halfLength = 15;
-  const halfWidth  = 7.5;
-
-  const rows        = 2;      // two rows courtside
-  const marginFront = 0.8;    // reduce so seats hug the court edge
-  const rowSpacing  = 0.6;    // vertical offset between those two rows
-  const seatsAlong  = 30;     // along the long side
-  const seatsAcross = 15;     // along the short side
+  const halfLength  = 15;
+  const halfWidth   = 7.5;
+  const rows        = 2;     // two rows courtside
+  const marginFront = 0.8;   // close to court edge
+  const rowSpacing  = 0.6;   // vertical step per row
+  const seatsAlong  = 30;    // seats on long side
+  const seatsAcross = 15;    // seats on short side
+  const color       = 0x0033aa;
 
   for (let r = 0; r < rows; r++) {
-    const y      = 0.3 + r * rowSpacing;             
-    const offset = marginFront + r * rowSpacing + 0.1; // a bit outside court
+    const y      = 0.3 + r * rowSpacing;
+    const offset = marginFront + r * rowSpacing + 0.1;
 
     // long sides
     for (let i = 0; i < seatsAlong; i++) {
       const t = i / (seatsAlong - 1);
       const x = -halfLength + t * (2 * halfLength);
       [ -halfWidth - offset, +halfWidth + offset ].forEach(z => {
-        const seat = new THREE.Mesh(seatGeo, seatMat);
+        const seat = createSeatModel(color);
         seat.position.set(x, y, z);
         seat.lookAt(0, y, 0);
         scene.add(seat);
@@ -544,7 +545,7 @@ function createCourtsideSeats() {
       const t = i / (seatsAcross - 1);
       const z = -halfWidth + t * (2 * halfWidth);
       [ -halfLength - offset, +halfLength + offset ].forEach(x => {
-        const seat = new THREE.Mesh(seatGeo, seatMat);
+        const seat = createSeatModel(color);
         seat.position.set(x, y, z);
         seat.lookAt(0, y, 0);
         scene.add(seat);
