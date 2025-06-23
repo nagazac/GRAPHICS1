@@ -7,15 +7,51 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
-scene.background = new THREE.Color(0x000000);
+scene.background = new THREE.Color(0x202020);
 
-// Lumières
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 20, 15);
-directionalLight.castShadow = true;
-scene.add(directionalLight);
+const floorGeometry = new THREE.CircleGeometry(60, 64);
+const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Lumière ambiante douce
+scene.add(new THREE.AmbientLight(0x222222));
+
+const gradinLight = new THREE.DirectionalLight(0xffffff, 0.6);
+gradinLight.position.set(0, 20, 0);
+gradinLight.castShadow = false;
+scene.add(gradinLight);
+
+// Projecteurs comme dans un vrai stade
+const spotLight1 = new THREE.SpotLight(0xffffff, 0.8);
+spotLight1.position.set(0, 30, 0);
+spotLight1.angle = Math.PI / 5;
+spotLight1.penumbra = 0.3;
+spotLight1.decay = 2;
+spotLight1.distance = 100;
+spotLight1.castShadow = true;
+scene.add(spotLight1);
+
+const spotLight2 = new THREE.SpotLight(0xffffff, 0.8);
+spotLight2.position.set(-15, 25, 15);
+spotLight2.angle = Math.PI / 6;
+spotLight2.penumbra = 0.4;
+spotLight2.decay = 2;
+spotLight2.distance = 100;
+spotLight2.castShadow = true;
+scene.add(spotLight2);
+
+const spotLight3 = new THREE.SpotLight(0xffffff, 0.8);
+spotLight3.position.set(15, 25, -15);
+spotLight3.angle = Math.PI / 6;
+spotLight3.penumbra = 0.4;
+spotLight3.decay = 2;
+spotLight3.distance = 100;
+spotLight3.castShadow = true;
+scene.add(spotLight3);
+
 renderer.shadowMap.enabled = true;
 
 function createCourtCanvasTexture(callback) {
@@ -246,18 +282,33 @@ function addHoopsToScene() {
 
 class Basketball {
   constructor(options = {}) {
-    this.radius = options.radius || 0.3;
+    this.radius = options.radius || 0.3;  // NBA size radius ~0.3m
     this.position = options.position || { x: 0, y: null, z: 0 };
     this.floorOffset = options.floorOffset || 0.1;
   }
 
   create() {
     const ball = new THREE.Group();
-    const geo = new THREE.SphereGeometry(this.radius, 100, 100);
-    const mat = new THREE.MeshStandardMaterial({ map: new THREE.TextureLoader().load('/textures/Basketball.jpg'), roughness: 0.7, metalness: 0.05 });
-    ball.add(new THREE.Mesh(geo, mat));
+
+    // Load external realistic basketball texture
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('/textures/Basketball.jpg');
+
+    const geometry = new THREE.SphereGeometry(this.radius, 64, 64);
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.7,
+      metalness: 0.05
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    ball.add(mesh);
+
     const y = this.position.y !== null ? this.position.y : this.radius + this.floorOffset;
     ball.position.set(this.position.x, y, this.position.z);
+
     return ball;
   }
 
@@ -300,9 +351,202 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+const scoreCanvas = document.createElement('canvas');
+scoreCanvas.width  = 512;
+scoreCanvas.height = 256;
+const scoreCtx    = scoreCanvas.getContext('2d');
+
+// fonction utilitaire pour (re)dessiner le score centré
+function updateScoreCanvas(home = 0, away = 0) {
+  // fond noir
+  scoreCtx.fillStyle = '#000';
+  scoreCtx.fillRect(0, 0, scoreCanvas.width, scoreCanvas.height);
+
+  // style du texte
+  scoreCtx.fillStyle    = '#fff';
+  scoreCtx.font         = 'bold 64px Arial';
+  scoreCtx.textAlign    = 'center';   // centre horizontalement
+  scoreCtx.textBaseline = 'middle';   // centre verticalement
+
+  // positions verticales : 1/3 et 2/3 de la hauteur
+  const cx    = scoreCanvas.width  / 2;
+  const yHome = scoreCanvas.height * 1/3;
+  const yAway = scoreCanvas.height * 2/3;
+
+  // dessine Home et Away centrés
+  scoreCtx.fillText(`Home: ${home}`, cx, yHome);
+  scoreCtx.fillText(`Away: ${away}`, cx, yAway);
+
+  // indique à Three.js de rafraîchir la texture
+  scoreTexture.needsUpdate = true;
+}
+
+const scoreTexture = new THREE.CanvasTexture(scoreCanvas);
+updateScoreCanvas(0, 0);  // valeurs initiales
+
+// charge la texture du logo IDC
+const logoTexture = new THREE.TextureLoader().load('/textures/idc_cup_logo.png');
+
+
+
+
+// — remplacez votre ancienne createJumbotron() par celle-ci —
+function createJumbotron() {
+  const group = new THREE.Group();
+
+  // 1) Tige verticale
+  const rodGeo = new THREE.CylinderGeometry(0.1, 0.1, 8, 12);
+  const rodMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+  const supportRod = new THREE.Mesh(rodGeo, rodMat);
+  supportRod.position.set(0, 16, 0);
+  supportRod.castShadow = true;
+  group.add(supportRod);
+
+  // 2) Poutre horizontale
+  const beamGeo = new THREE.BoxGeometry(6, 0.2, 0.2);
+  const supportBeam = new THREE.Mesh(beamGeo, rodMat);
+  supportBeam.position.set(0, 12.8, 0);
+  supportBeam.castShadow = true;
+  group.add(supportBeam);
+
+  // 3) Écrans (4 faces)
+  const sideGeo = new THREE.BoxGeometry(3, 2, 0.2);
+
+  for (let i = 0; i < 4; i++) {
+    // i==0 et i==2 → score ; sinon logo
+    const tex = (i === 0 || i === 2) ? scoreTexture : logoTexture;
+    const screenMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.6
+    });
+
+    const screen = new THREE.Mesh(sideGeo, screenMat);
+    screen.position.set(
+      Math.sin(i * Math.PI / 2) * 1.8,  // rayon 1.8m
+      11.5,                              // hauteur
+      Math.cos(i * Math.PI / 2) * 1.8
+    );
+    screen.lookAt(0, 11.5, 0);
+    screen.castShadow = true;
+    group.add(screen);
+  }
+
+  // 4) Chapeau supérieur
+  const capGeo = new THREE.CylinderGeometry(1.8, 1.8, 0.3, 32);
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  const cap = new THREE.Mesh(capGeo, capMat);
+  cap.position.y = 12.2;
+  cap.castShadow = true;
+  group.add(cap);
+
+  scene.add(group);
+}
+
+// Gradins circulaires
+function createAudienceRings() {
+  const seatGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  const matBlue  = new THREE.MeshStandardMaterial({ color: 0x0033aa });
+  const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+  // Configuration
+  const seatsPerRow   = 60;    // number of seats around the circle
+  const rowSpacing    = 0.3;   // radial + vertical spacing per row
+  const lowerRows     = 20;    // rows in lower bowl
+  const upperRows     = 20;    // rows in upper bowl
+  const lowerRadius   = 18;    // distance from center to first lower row
+  const bowlGap       = 2.0;   // gap between lower and upper bowls
+
+  // Helper to build one bowl
+  function buildBowl(rowCount, startRadius, yOffset) {
+    const groupSize = 5;  // seats per color block
+
+    for (let i = 0; i < rowCount; i++) {
+      const radius = startRadius + i * rowSpacing;
+      const y      = yOffset      + i * rowSpacing;
+
+      for (let j = 0; j < seatsPerRow; j++) {
+        const angle = (j / seatsPerRow) * Math.PI * 2;
+        const x     = Math.cos(angle) * radius;
+        const z     = Math.sin(angle) * radius;
+
+        // Alternate blocks of seats blue/white
+        const mat = (Math.floor(j / groupSize) % 2 === 0) ? matBlue : matWhite;
+
+        const seat = new THREE.Mesh(seatGeo, mat);
+        seat.position.set(x, y, z);
+        seat.lookAt(0, y, 0);
+        seat.castShadow = true;
+        scene.add(seat);
+      }
+    }
+  }
+
+  // Lower bowl (closest to court)
+  buildBowl(
+    lowerRows,
+    lowerRadius,
+    /* yOffset */ 0.5
+  );
+
+  // Upper bowl (steeper, set back)
+  buildBowl(
+    upperRows,
+    lowerRadius + lowerRows * rowSpacing + bowlGap,
+    /* yOffset */ 0.5 + lowerRows * rowSpacing + bowlGap * 0.5
+  );
+}
+
+function createCourtsideSeats() {
+  const seatGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x0033aa }); // bright Magic-blue
+
+  // Match your court box (30×15m)
+  const halfLength = 15;
+  const halfWidth  = 7.5;
+
+  const rows        = 2;      // two rows courtside
+  const marginFront = 0.8;    // reduce so seats hug the court edge
+  const rowSpacing  = 0.6;    // vertical offset between those two rows
+  const seatsAlong  = 30;     // along the long side
+  const seatsAcross = 15;     // along the short side
+
+  for (let r = 0; r < rows; r++) {
+    const y      = 0.3 + r * rowSpacing;             
+    const offset = marginFront + r * rowSpacing + 0.1; // a bit outside court
+
+    // long sides
+    for (let i = 0; i < seatsAlong; i++) {
+      const t = i / (seatsAlong - 1);
+      const x = -halfLength + t * (2 * halfLength);
+      [ -halfWidth - offset, +halfWidth + offset ].forEach(z => {
+        const seat = new THREE.Mesh(seatGeo, seatMat);
+        seat.position.set(x, y, z);
+        seat.lookAt(0, y, 0);
+        scene.add(seat);
+      });
+    }
+
+    // short sides
+    for (let i = 0; i < seatsAcross; i++) {
+      const t = i / (seatsAcross - 1);
+      const z = -halfWidth + t * (2 * halfWidth);
+      [ -halfLength - offset, +halfLength + offset ].forEach(x => {
+        const seat = new THREE.Mesh(seatGeo, seatMat);
+        seat.position.set(x, y, z);
+        seat.lookAt(0, y, 0);
+        scene.add(seat);
+      });
+    }
+  }
+}
+
 createBasketballCourt(() => {
   addHoopsToScene();
   addBall();
+  createAudienceRings();
+  createCourtsideSeats();
+  createJumbotron();
 });
 createUIComponents();
 
