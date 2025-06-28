@@ -8,10 +8,6 @@
 3. Start the local web server: `node index.js`
 4. Open your browser and go to http://localhost:8000
 
-## Complete Instructions
-**All detailed instructions, requirements, and specifications can be found in:**
-`basketball_exercise_instructions.html`
-
 ## Group Members
 - Zacarie Cherki
 - Charles Krammer
@@ -44,3 +40,7 @@
 | Texture     | `/textures/Basketball.jpg`        | Realistic basketball surface         |
 | Texture     | `/textures/jumbotron_screen.jpg`  | Screens for the suspended jumbotron |
 | Texture     | `/textures/idc_cup_logo.png`      | Logo placed at center court         |
+
+## Complete Instructions
+**All detailed instructions, requirements, and specifications can be found in:**
+`basketball_exercise_instructions.html`
