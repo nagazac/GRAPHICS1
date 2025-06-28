@@ -508,7 +508,7 @@ function createAudienceRings() {
   }
 
   // Lower bowl
-  buildBowl(lowerRows, lowerRadius,                   /* yOffset */ 0.5);
+  buildBowl(lowerRows, lowerRadius,/* yOffset */ 0.5);
   // Upper bowl
   buildBowl(upperRows, lowerRadius + lowerRows*rowSpacing + bowlGap,
                      /* yOffset */ 0.5 + lowerRows*rowSpacing + bowlGap*0.5);
