@@ -1,4 +1,5 @@
 # Computer Graphics - Exercise 5 - WebGL Basketball Court
+
 ![Demo](demo.gif)
 
 ## Getting Started
@@ -12,15 +13,8 @@
 `basketball_exercise_instructions.html`
 
 ## Group Members
-**MANDATORY: Add the full names of all group members here:**
 - Zacarie Cherki
 - Charles Krammer
-
-## Technical Details
-- Run the server with: `node index.js`
-- Access at http://localhost:8000 in your web browser
-
-**Note that you can find screenshots of the results in the pictures repo ;)**
 
 ## ✨ Additional Features Implemented
 
@@ -38,6 +32,9 @@
   - Rim with realistic size and position
   - Net built from line segments
   - Supporting pole and arm behind the backboard
+
+
+**Note that you can find screenshots of the results in the pictures repo and you have also a video in demo.gif that should be displayed here ;)**
 
 ## 📁 External Assets Used
 
