@@ -1,5 +1,5 @@
 # Computer Graphics - Exercise 5 - WebGL Basketball Court
-![Demo](demo.gif)
+[![Click to view video](/pictures/Screenshot 2025-06-28 at 21.13.19.png)](demo.mov)
 
 ## Getting Started
 1. Clone this repository to your local machine
