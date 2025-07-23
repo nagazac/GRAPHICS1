@@ -75,6 +75,10 @@ let ballVelocity = new THREE.Vector3(0, 0, 0);
 let ballInFlight = false;
 const gravity = -9.8; // m/s² (scaled for scene)
 
+// Add collision detection variables
+let homeScore = 0;
+let awayScore = 0;
+
 
 
 function createCourtCanvasTexture(callback) {
@@ -437,9 +441,6 @@ function updatePowerUI() {
   powerBarElement.value.textContent = percentage + '%';
 }
 
-
-
-
 const scoreCanvas = document.createElement('canvas');
 scoreCanvas.width  = 512;
 scoreCanvas.height = 256;
@@ -656,9 +657,10 @@ instructionsElement.innerHTML = `
   <h3>Controls:</h3>
   <p>O - Toggle orbit camera</p>
   <p>Arrow Keys - Move ball</p>
-  <p>W/S - Adjust shot power (angle & distance)</p>
+  <p>W/S - Adjust shot power</p>
   <p>Spacebar - Shoot ball toward nearest hoop</p>
   <p>R - Reset ball position</p>
+  <p>C - Clear scores</p>
 `;
 document.body.appendChild(instructionsElement);
 
@@ -686,6 +688,15 @@ document.addEventListener('keydown', (e) => {
     case 'R':
       resetBallPosition();
       break;
+    case 'c':
+    case 'C':
+      // Reset scores
+      homeScore = 0;
+      awayScore = 0;
+      updateScoreCanvas(homeScore, awayScore);
+      document.getElementById('home-score').textContent = homeScore;
+      document.getElementById('away-score').textContent = awayScore;
+      break;
     case 'o':
     case 'O':
       isOrbitEnabled = !isOrbitEnabled;
@@ -704,6 +715,101 @@ document.addEventListener('keyup', (e) => {
   }
 });
 
+// Collision detection functions (place before animate function)
+function checkBackboardCollision(hoop) {
+  if (!hoop || !ballMesh || !ballInFlight) return;
+
+  // Find backboard (transparent mesh)
+  const backboard = hoop.children.find(obj => 
+    obj.material && obj.material.transparent === true
+  );
+  if (!backboard) return;
+
+  // Bounding boxes
+  const ballBB = new THREE.Box3().setFromObject(ballMesh);
+  const backboardBB = new THREE.Box3().setFromObject(backboard);
+
+  // Check intersection
+  if (ballBB.intersectsBox(backboardBB)) {
+    // Get backboard position to determine which side was hit
+    const backboardPos = new THREE.Vector3();
+    backboard.getWorldPosition(backboardPos);
+    
+    // Determine collision normal based on ball position relative to backboard
+    const ballPos = ballMesh.position;
+    let normalX = ballPos.x > backboardPos.x ? 1 : -1;
+    
+    // Reflect velocity
+    ballVelocity.x = -ballVelocity.x * 0.7; // Energy loss on backboard hit
+    ballVelocity.y *= 0.9; // Slight vertical dampening
+    ballVelocity.z *= 0.9; // Slight Z dampening
+    
+    // Push ball away from backboard to prevent sticking
+    ballMesh.position.x += normalX * 0.2;
+    
+    console.log("Backboard collision!");
+  }
+}
+
+function checkRimCollision(hoop, hoopIndex) {
+  if (!hoop || !ballMesh || !ballInFlight) return;
+
+  const rim = hoop.userData.rim;
+  if (!rim) return;
+
+  const rimPos = new THREE.Vector3();
+  rim.getWorldPosition(rimPos);
+  
+  const ballPos = ballMesh.position;
+  const ballRadius = 0.3;
+  
+  // Check if ball is near rim height
+  const heightDiff = Math.abs(ballPos.y - rimPos.y);
+  const horizontalDist = Math.sqrt(
+    Math.pow(ballPos.x - rimPos.x, 2) + 
+    Math.pow(ballPos.z - rimPos.z, 2)
+  );
+  
+  // Rim collision (ball hits rim edge)
+  if (heightDiff < 0.15 && horizontalDist < 0.55 && horizontalDist > 0.25) {
+    // Ball hit the rim
+    const bounceDirection = new THREE.Vector3()
+      .subVectors(ballPos, rimPos)
+      .normalize();
+    
+    // Reflect velocity with energy loss
+    ballVelocity.reflect(bounceDirection);
+    ballVelocity.multiplyScalar(0.6);
+    
+    // Add randomness for realistic rim bounces
+    ballVelocity.x += (Math.random() - 0.5) * 1.5;
+    ballVelocity.z += (Math.random() - 0.5) * 1.5;
+    
+    // Move ball away from rim
+    ballMesh.position.add(bounceDirection.multiplyScalar(0.15));
+    
+    console.log("Rim collision!");
+    return;
+  }
+  
+  // Score detection - ball passes through rim from above
+  if (heightDiff < 0.2 && horizontalDist < 0.35 && ballVelocity.y < -1) {
+    // Score!
+    if (hoopIndex === 0) { // Left hoop
+      awayScore += 2;
+    } else { // Right hoop  
+      homeScore += 2;
+    }
+    
+    // Update score displays
+    updateScoreCanvas(homeScore, awayScore);
+    document.getElementById('home-score').textContent = homeScore;
+    document.getElementById('away-score').textContent = awayScore;
+    
+    console.log(`SCORE! Home: ${homeScore}, Away: ${awayScore}`);
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -716,16 +822,30 @@ function animate() {
       // Position update
       ballMesh.position.addScaledVector(ballVelocity, delta);
 
-      // Ground collision with bounce
-      const ballRadius = 0.4;
+      // Check hoop collisions
+      checkBackboardCollision(leftHoop);
+      checkBackboardCollision(rightHoop);
+      checkRimCollision(leftHoop, 0);
+      checkRimCollision(rightHoop, 1);
+
+      // Ground collision with improved bouncing
+      const ballRadius = 0.3;
       if (ballMesh.position.y <= ballRadius) {
         ballMesh.position.y = ballRadius;
         
-        // Add some bounce but reduce it each time
-        if (Math.abs(ballVelocity.y) > 0.5) {
-          ballVelocity.y = -ballVelocity.y * 0.4; // bounce with energy loss
-          ballVelocity.x *= 0.8; // slow down horizontal movement
-          ballVelocity.z *= 0.8;
+        // Improved bouncing with more realistic physics
+        if (Math.abs(ballVelocity.y) > 0.8) {
+          ballVelocity.y = -ballVelocity.y * 0.65; // More realistic bounce
+          ballVelocity.x *= 0.85; // Less horizontal slowdown
+          ballVelocity.z *= 0.85;
+          
+          // Add slight random variation for realism
+          ballVelocity.x += (Math.random() - 0.5) * 0.3;
+          ballVelocity.z += (Math.random() - 0.5) * 0.3;
+        } else if (Math.abs(ballVelocity.y) > 0.3) {
+          ballVelocity.y = -ballVelocity.y * 0.4; // Smaller bounces
+          ballVelocity.x *= 0.9;
+          ballVelocity.z *= 0.9;
         } else {
           // Stop bouncing when velocity is too low
           ballVelocity.set(0, 0, 0);
