@@ -17,41 +17,44 @@ floor.receiveShadow = true;
 scene.add(floor);
 
 // Lumière ambiante douce
-scene.add(new THREE.AmbientLight(0x222222));
+function addStadiumLights() {
+  scene.add(new THREE.AmbientLight(0x222222));
 
-const gradinLight = new THREE.DirectionalLight(0xffffff, 0.6);
-gradinLight.position.set(0, 20, 0);
-gradinLight.castShadow = false;
-scene.add(gradinLight);
+  const gradinLight = new THREE.DirectionalLight(0xffffff, 0.6);
+  gradinLight.position.set(0, 20, 0);
+  gradinLight.castShadow = false;
+  scene.add(gradinLight);
 
-// Projecteurs comme dans un vrai stade
-const spotLight1 = new THREE.SpotLight(0xffffff, 0.8);
-spotLight1.position.set(0, 30, 0);
-spotLight1.angle = Math.PI / 5;
-spotLight1.penumbra = 0.3;
-spotLight1.decay = 2;
-spotLight1.distance = 100;
-spotLight1.castShadow = true;
-scene.add(spotLight1);
+  // Projecteurs comme dans un vrai stade
+  const spotLight1 = new THREE.SpotLight(0xffffff, 0.8);
+  spotLight1.position.set(0, 30, 0);
+  spotLight1.angle = Math.PI / 5;
+  spotLight1.penumbra = 0.3;
+  spotLight1.decay = 2;
+  spotLight1.distance = 100;
+  spotLight1.castShadow = true;
+  scene.add(spotLight1);
 
-const spotLight2 = new THREE.SpotLight(0xffffff, 0.8);
-spotLight2.position.set(-15, 25, 15);
-spotLight2.angle = Math.PI / 6;
-spotLight2.penumbra = 0.4;
-spotLight2.decay = 2;
-spotLight2.distance = 100;
-spotLight2.castShadow = true;
-scene.add(spotLight2);
+  const spotLight2 = new THREE.SpotLight(0xffffff, 0.8);
+  spotLight2.position.set(-15, 25, 15);
+  spotLight2.angle = Math.PI / 6;
+  spotLight2.penumbra = 0.4;
+  spotLight2.decay = 2;
+  spotLight2.distance = 100;
+  spotLight2.castShadow = true;
+  scene.add(spotLight2);
 
-const spotLight3 = new THREE.SpotLight(0xffffff, 0.8);
-spotLight3.position.set(15, 25, -15);
-spotLight3.angle = Math.PI / 6;
-spotLight3.penumbra = 0.4;
-spotLight3.decay = 2;
-spotLight3.distance = 100;
-spotLight3.castShadow = true;
-scene.add(spotLight3);
+  const spotLight3 = new THREE.SpotLight(0xffffff, 0.8);
+  spotLight3.position.set(15, 25, -15);
+  spotLight3.angle = Math.PI / 6;
+  spotLight3.penumbra = 0.4;
+  spotLight3.decay = 2;
+  spotLight3.distance = 100;
+  spotLight3.castShadow = true;
+  scene.add(spotLight3);
+}
 
+addStadiumLights();
 renderer.shadowMap.enabled = true;
 
 //HW6 global variables and setup:
@@ -62,11 +65,16 @@ const courtHalfLength = 15;
 const courtHalfWidth  = 7.5;
 const clock = new THREE.Clock();
 let shotPower = 50;       // starting value (%)
-const powerStep = 5;      // change per key press
+const powerStep = 1;      // change per key press
 const minPower = 0;
 const maxPower = 100;
 let powerBarElement;      // UI reference
-const velocity = shotPower / 100 * 1;  // (maxVelocity is tunable)
+let leftHoop, rightHoop;
+// --- Shooting & Physics ---
+let ballVelocity = new THREE.Vector3(0, 0, 0);
+let ballInFlight = false;
+const gravity = -9.8; // m/s² (scaled for scene)
+
 
 
 function createCourtCanvasTexture(callback) {
@@ -280,20 +288,33 @@ class BasketballHoop {
 
   createCompleteHoop(side) {
     const g = new THREE.Group();
-    g.add(this.createBackboard(side));
-    g.add(this.createRim(side));
-    g.add(this.createNet(side));
-    g.add(this.createPole(side));
-    g.add(this.createArm(side));
+
+    const backboard = this.createBackboard(side);
+    const rim = this.createRim(side);   // <- keep reference
+    const net = this.createNet(side);
+    const pole = this.createPole(side);
+    const arm = this.createArm(side);
+
+    g.add(backboard, rim, net, pole, arm);
+
+    // Attach reference to rim (so we can access later)
+    g.userData.rim = rim;
+
     return g;
   }
 }
 
+
 function addHoopsToScene() {
   const hoopBuilder = new BasketballHoop();
-  scene.add(hoopBuilder.createCompleteHoop(-1));
-  scene.add(hoopBuilder.createCompleteHoop(+1));
+
+  leftHoop = hoopBuilder.createCompleteHoop(-1);
+  rightHoop = hoopBuilder.createCompleteHoop(+1);
+
+  scene.add(leftHoop);
+  scene.add(rightHoop);
 }
+
 
 class Basketball {
   constructor(options = {}) {
@@ -417,40 +438,6 @@ function updatePowerUI() {
 }
 
 
-function animate() {
-  requestAnimationFrame(animate);
-
-  const delta = clock.getDelta(); // seconds since last frame
-
-  // Movement update with frame rate independence
-  if (ballMesh) {
-    let x = ballMesh.position.x;
-    let z = ballMesh.position.z;
-
-    const speed = moveSpeed * delta * 60;  // normalize to ~60FPS baseline
-
-    if (move.left)   x -= speed;
-    if (move.right)  x += speed;
-    if (move.forward) z -= speed;
-    if (move.back)    z += speed;
-
-    // Boundaries
-    x = Math.max(-courtHalfLength + 1, Math.min(courtHalfLength - 1, x));
-    z = Math.max(-courtHalfWidth + 1,  Math.min(courtHalfWidth - 1, z));
-
-    ballMesh.position.set(x, ballMesh.position.y, z);
-  }
-
-  controls.enabled = isOrbitEnabled;
-  controls.update();
-  renderer.render(scene, camera);
-}
-
-function resetBasketball() {
-  if (ballMesh) {
-    ballMesh.position.set(0, 0.4, 0);
-  }
-}
 
 
 const scoreCanvas = document.createElement('canvas');
@@ -665,7 +652,14 @@ instructionsElement.style.left = '20px';
 instructionsElement.style.color = 'white';
 instructionsElement.style.fontSize = '16px';
 instructionsElement.style.fontFamily = 'Arial, sans-serif';
-instructionsElement.innerHTML = `<h3>Controls:</h3><p>O - Toggle orbit camera</p>`;
+instructionsElement.innerHTML = `
+  <h3>Controls:</h3>
+  <p>O - Toggle orbit camera</p>
+  <p>Arrow Keys - Move ball</p>
+  <p>W/S - Adjust shot power (angle & distance)</p>
+  <p>Spacebar - Shoot ball toward nearest hoop</p>
+  <p>R - Reset ball position</p>
+`;
 document.body.appendChild(instructionsElement);
 
 document.addEventListener('keydown', (e) => {
@@ -674,6 +668,10 @@ document.addEventListener('keydown', (e) => {
     case 'ArrowRight': move.right = true; break;
     case 'ArrowUp':    move.forward = true; break;
     case 'ArrowDown':  move.back = true;  break;
+    case ' ':
+      e.preventDefault(); // prevent page scroll
+      if (!ballInFlight) shootBall();
+      break;
     case 'w':
     case 'W':
       shotPower = Math.min(maxPower, shotPower + powerStep);
@@ -686,10 +684,15 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'r':
     case 'R':
-      resetBasketball();
+      resetBallPosition();
+      break;
+    case 'o':
+    case 'O':
+      isOrbitEnabled = !isOrbitEnabled;
       break;
   }
 });
+
 
 
 document.addEventListener('keyup', (e) => {
@@ -701,5 +704,121 @@ document.addEventListener('keyup', (e) => {
   }
 });
 
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+
+  if (ballMesh) {
+    if (ballInFlight) {
+      // Gravity
+      ballVelocity.y += gravity * delta;
+
+      // Position update
+      ballMesh.position.addScaledVector(ballVelocity, delta);
+
+      // Ground collision with bounce
+      const ballRadius = 0.4;
+      if (ballMesh.position.y <= ballRadius) {
+        ballMesh.position.y = ballRadius;
+        
+        // Add some bounce but reduce it each time
+        if (Math.abs(ballVelocity.y) > 0.5) {
+          ballVelocity.y = -ballVelocity.y * 0.4; // bounce with energy loss
+          ballVelocity.x *= 0.8; // slow down horizontal movement
+          ballVelocity.z *= 0.8;
+        } else {
+          // Stop bouncing when velocity is too low
+          ballVelocity.set(0, 0, 0);
+          ballInFlight = false;
+        }
+      }
+      
+      // Court boundaries - ball stops if it goes too far
+      const maxDistance = 25;
+      if (Math.abs(ballMesh.position.x) > maxDistance || Math.abs(ballMesh.position.z) > maxDistance) {
+        ballVelocity.set(0, 0, 0);
+        ballInFlight = false;
+      }
+    } else {
+      handleIdleMovement(delta); // arrow keys
+    }
+  }
+
+  controls.enabled = isOrbitEnabled;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function shootBall() {
+  if (!ballMesh || !leftHoop || !rightHoop) return;
+
+  // Get rim world positions
+  const leftRimPos = new THREE.Vector3();
+  const rightRimPos = new THREE.Vector3();
+  leftHoop.userData.rim.getWorldPosition(leftRimPos);
+  rightHoop.userData.rim.getWorldPosition(rightRimPos);
+
+  // Choose closest rim
+  const distLeft = ballMesh.position.distanceTo(leftRimPos);
+  const distRight = ballMesh.position.distanceTo(rightRimPos);
+  const targetPos = distLeft < distRight ? leftRimPos : rightRimPos;
+
+  // Horizontal direction only
+  const horizontalDir = new THREE.Vector3(
+    targetPos.x - ballMesh.position.x,
+    0,
+    targetPos.z - ballMesh.position.z
+  ).normalize();
+
+  // Fixed high angle (70°)
+  const shootingAngle = (70 * Math.PI) / 180;
+
+  // Much lower horizontal speed (2 → 4)
+  const horizontalSpeed = 2 + (shotPower / 100) * 2.7;
+
+  // Vertical speed based on angle
+  const verticalSpeed = Math.tan(shootingAngle) * horizontalSpeed;
+
+  // Apply velocity
+  ballVelocity.copy(horizontalDir.multiplyScalar(horizontalSpeed));
+  ballVelocity.y = verticalSpeed;
+
+  ballInFlight = true;
+}
+
+
+function handleIdleMovement(delta) {
+  let dx = 0, dz = 0;
+  if (move.left)   dx -= 1;
+  if (move.right)  dx += 1;
+  if (move.forward) dz -= 1;
+  if (move.back)    dz += 1;
+
+  const len = Math.hypot(dx, dz);
+  if (len > 0) {
+    dx /= len;
+    dz /= len;
+  }
+
+  const speed = moveSpeed * delta * 60; // frame-rate independent
+  let x = ballMesh.position.x + dx * speed;
+  let z = ballMesh.position.z + dz * speed;
+
+  // Boundaries
+  x = Math.max(-courtHalfLength + 1, Math.min(courtHalfLength - 1, x));
+  z = Math.max(-courtHalfWidth + 1,  Math.min(courtHalfWidth - 1, z));
+
+  ballMesh.position.set(x, ballMesh.position.y, z);
+}
+
+function resetBallPosition() {
+  if (ballMesh) {
+    ballMesh.position.set(0, 0.4, 0);
+    ballVelocity.set(0, 0, 0);
+    ballInFlight = false;
+    shotPower = 50;
+    updatePowerUI();
+  }
+}
 
 animate();
