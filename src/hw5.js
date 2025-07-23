@@ -66,6 +66,7 @@ const powerStep = 5;      // change per key press
 const minPower = 0;
 const maxPower = 100;
 let powerBarElement;      // UI reference
+const velocity = shotPower / 100 * 1;  // (maxVelocity is tunable)
 
 
 function createCourtCanvasTexture(callback) {
@@ -355,22 +356,66 @@ function addBall() {
 function createUIComponents() {
   const overlay = document.createElement('div');
   overlay.className = 'ui-overlay';
-  Object.assign(overlay.style, { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+  Object.assign(overlay.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none'
+  });
   document.body.appendChild(overlay);
 
   const score = document.createElement('div');
   score.id = 'scoreboard';
   Object.assign(score.style, {
-    position: 'absolute', top: '16px', left: '16px', width: '140px', background: 'rgba(0,0,0,0.6)', color: '#fff',
-    padding: '12px', borderRadius: '6px', fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.4', pointerEvents: 'auto'
+    position: 'absolute',
+    top: '16px',
+    left: '16px',
+    width: '160px',
+    background: 'rgba(0,0,0,0.6)',
+    color: '#fff',
+    padding: '12px',
+    borderRadius: '6px',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '14px',
+    lineHeight: '1.4',
+    pointerEvents: 'auto'
   });
   score.innerHTML = `
     <h2 style="margin:0 0 8px;">Score</h2>
-    <div style="display:flex; justify-content:space-between;"><strong>Home</strong><span id="home-score">0</span></div>
-    <div style="display:flex; justify-content:space-between; margin-top:6px;"><strong>Away</strong><span id="away-score">0</span></div>
+    <div style="display:flex; justify-content:space-between;">
+      <strong>Home</strong><span id="home-score">0</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px;">
+      <strong>Away</strong><span id="away-score">0</span>
+    </div>
+    <div style="margin-top:12px;">
+      <strong>Shot Power</strong>
+      <div id="power-bar" style="
+        width: 100%; height: 10px; background: #444; margin-top: 4px;
+        border-radius: 5px; overflow: hidden;">
+        <div id="power-fill" style="
+          width: 50%; height: 100%; background: limegreen;"></div>
+      </div>
+      <div id="power-value" style="text-align:right; font-size:12px; margin-top:2px;">50%</div>
+    </div>
   `;
   overlay.appendChild(score);
+
+  powerBarElement = {
+    fill: document.getElementById('power-fill'),
+    value: document.getElementById('power-value')
+  };
 }
+
+function updatePowerUI() {
+  if (!powerBarElement) return;
+  const percentage = shotPower;
+  powerBarElement.fill.style.width = percentage + '%';
+  powerBarElement.value.textContent = percentage + '%';
+}
+
 
 function animate() {
   requestAnimationFrame(animate);
@@ -604,6 +649,8 @@ createBasketballCourt(() => {
   createJumbotron();
 });
 createUIComponents();
+updatePowerUI();
+
 
 const controls = new OrbitControls(camera, renderer.domElement);
 let isOrbitEnabled = true;
@@ -623,14 +670,27 @@ document.body.appendChild(instructionsElement);
 
 document.addEventListener('keydown', (e) => {
   switch (e.key) {
-    case 'o': isOrbitEnabled = !isOrbitEnabled; break;
     case 'ArrowLeft':  move.left = true;  break;
     case 'ArrowRight': move.right = true; break;
     case 'ArrowUp':    move.forward = true; break;
     case 'ArrowDown':  move.back = true;  break;
-    case "r": case "R": resetBasketball(); break;
+    case 'w':
+    case 'W':
+      shotPower = Math.min(maxPower, shotPower + powerStep);
+      updatePowerUI();
+      break;
+    case 's':
+    case 'S':
+      shotPower = Math.max(minPower, shotPower - powerStep);
+      updatePowerUI();
+      break;
+    case 'r':
+    case 'R':
+      resetBasketball();
+      break;
   }
 });
+
 
 document.addEventListener('keyup', (e) => {
   switch (e.key) {
