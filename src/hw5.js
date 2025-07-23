@@ -75,6 +75,11 @@ let ballVelocity = new THREE.Vector3(0, 0, 0);
 let ballInFlight = false;
 const gravity = -9.8; // m/s² (scaled for scene)
 
+// --- Ball Rotation ---
+let ballAngularVelocity = new THREE.Vector3(0, 0, 0);
+let ballSphere; // Reference to the actual sphere mesh for rotation
+const rotationDamping = 0.98; // Rotation gradually slows down
+
 // Add collision detection variables
 let homeScore = 0;
 let awayScore = 0;
@@ -352,6 +357,9 @@ class Basketball {
     mesh.receiveShadow = true;
     ball.add(mesh);
 
+    // Store reference to sphere mesh for rotation
+    ball.userData.sphereMesh = mesh;
+
     // lift it off the floor
     const y = this.position.y !== null
       ? this.position.y
@@ -374,6 +382,7 @@ class Basketball {
 
 function addBall() {
   ballMesh = Basketball.create(scene);
+  ballSphere = ballMesh.userData.sphereMesh; // Store reference to sphere for rotation
   return ballMesh;
 }
 
@@ -744,6 +753,9 @@ function checkBackboardCollision(hoop) {
     ballVelocity.y *= 0.9; // Slight vertical dampening
     ballVelocity.z *= 0.9; // Slight Z dampening
     
+    // Update rotation after backboard collision
+    updateBallRotationFromVelocity(ballVelocity, 0.016); // Assume ~60fps for delta
+    
     // Push ball away from backboard to prevent sticking
     ballMesh.position.x += normalX * 0.2;
     
@@ -785,6 +797,9 @@ function checkRimCollision(hoop, hoopIndex) {
     ballVelocity.x += (Math.random() - 0.5) * 1.5;
     ballVelocity.z += (Math.random() - 0.5) * 1.5;
     
+    // Update rotation after rim collision
+    updateBallRotationFromVelocity(ballVelocity, 0.016); // Assume ~60fps for delta
+    
     // Move ball away from rim
     ballMesh.position.add(bounceDirection.multiplyScalar(0.15));
     
@@ -807,6 +822,12 @@ function checkRimCollision(hoop, hoopIndex) {
     document.getElementById('away-score').textContent = awayScore;
     
     console.log(`SCORE! Home: ${homeScore}, Away: ${awayScore}`);
+    
+    
+    // Reset ballInFLight after scoring with a small delay
+    setTimeout(() => {
+      ballInFlight = false;
+    }, 1500); // 1.5 second delay to see the score
   }
 }
 
@@ -822,6 +843,9 @@ function animate() {
       // Position update
       ballMesh.position.addScaledVector(ballVelocity, delta);
 
+      // Update ball rotation during flight
+      updateBallRotationDuringFlight(delta);
+
       // Check hoop collisions
       checkBackboardCollision(leftHoop);
       checkBackboardCollision(rightHoop);
@@ -829,7 +853,7 @@ function animate() {
       checkRimCollision(rightHoop, 1);
 
       // Ground collision with improved bouncing
-      const ballRadius = 0.3;
+      const ballRadius = 0.4;
       if (ballMesh.position.y <= ballRadius) {
         ballMesh.position.y = ballRadius;
         
@@ -842,21 +866,29 @@ function animate() {
           // Add slight random variation for realism
           ballVelocity.x += (Math.random() - 0.5) * 0.3;
           ballVelocity.z += (Math.random() - 0.5) * 0.3;
+          
+          // Update rotation after bounce
+          updateBallRotationFromVelocity(ballVelocity, delta);
         } else if (Math.abs(ballVelocity.y) > 0.3) {
           ballVelocity.y = -ballVelocity.y * 0.4; // Smaller bounces
           ballVelocity.x *= 0.9;
           ballVelocity.z *= 0.9;
+          
+          // Update rotation after bounce
+          updateBallRotationFromVelocity(ballVelocity, delta);
         } else {
           // Stop bouncing when velocity is too low
           ballVelocity.set(0, 0, 0);
+          ballAngularVelocity.set(0, 0, 0); // Stop rotation too
           ballInFlight = false;
         }
       }
       
       // Court boundaries - ball stops if it goes too far
-      const maxDistance = 25;
+      const maxDistance = 20;
       if (Math.abs(ballMesh.position.x) > maxDistance || Math.abs(ballMesh.position.z) > maxDistance) {
         ballVelocity.set(0, 0, 0);
+        ballAngularVelocity.set(0, 0, 0); // Stop rotation too
         ballInFlight = false;
       }
     } else {
@@ -903,7 +935,73 @@ function shootBall() {
   ballVelocity.copy(horizontalDir.multiplyScalar(horizontalSpeed));
   ballVelocity.y = verticalSpeed;
 
+  // Set initial ball rotation for shot (backspin)
+  setBallRotationFromShot(ballVelocity);
+
   ballInFlight = true;
+}
+
+// Ball rotation functions
+function updateBallRotationFromVelocity(velocity, delta) {
+  if (!ballSphere) return;
+  
+  const ballRadius = 0.3;
+  
+  // Calculate angular velocity based on linear velocity
+  // For a rolling ball: ω = v / r (angular velocity = linear velocity / radius)
+  const angularSpeed = velocity.length() / ballRadius;
+  
+  if (angularSpeed > 0.01) { // Only rotate if moving fast enough
+    // Calculate rotation axis perpendicular to velocity (for rolling motion)
+    const rotationAxis = new THREE.Vector3();
+    
+    // For rolling motion, rotation axis is perpendicular to both velocity and up vector
+    rotationAxis.crossVectors(velocity.clone().normalize(), new THREE.Vector3(0, 1, 0));
+    rotationAxis.normalize();
+    
+    // Apply rotation
+    const rotationAmount = angularSpeed * delta;
+    ballSphere.rotateOnAxis(rotationAxis, rotationAmount);
+    
+    // Store angular velocity for continued rotation during flight
+    ballAngularVelocity.copy(rotationAxis.multiplyScalar(angularSpeed));
+  }
+}
+
+function updateBallRotationDuringFlight(delta) {
+  if (!ballSphere) return;
+  
+  // Continue rotation during flight with gradual damping
+  const currentSpeed = ballAngularVelocity.length();
+  if (currentSpeed > 0.01) {
+    const rotationAxis = ballAngularVelocity.clone().normalize();
+    const rotationAmount = currentSpeed * delta;
+    
+    ballSphere.rotateOnAxis(rotationAxis, rotationAmount);
+    
+    // Apply damping to angular velocity (air resistance)
+    ballAngularVelocity.multiplyScalar(rotationDamping);
+  }
+}
+
+function setBallRotationFromShot(velocity) {
+  if (!ballSphere) return;
+  
+  // Calculate backspin for basketball shot
+  // Basketball shots typically have backspin around the X-axis
+  const horizontalVelocity = new THREE.Vector3(velocity.x, 0, velocity.z);
+  const speed = horizontalVelocity.length();
+  
+  if (speed > 0.5) {
+    // Create backspin - rotation around axis perpendicular to horizontal movement
+    const backspinAxis = new THREE.Vector3();
+    backspinAxis.crossVectors(horizontalVelocity.normalize(), new THREE.Vector3(0, 1, 0));
+    
+    // Basketball backspin is typically 2-3 rotations per second
+    const backspinSpeed = speed * 2.5; // Adjust this multiplier for desired spin rate
+    
+    ballAngularVelocity.copy(backspinAxis.multiplyScalar(backspinSpeed));
+  }
 }
 
 
@@ -924,6 +1022,18 @@ function handleIdleMovement(delta) {
   let x = ballMesh.position.x + dx * speed;
   let z = ballMesh.position.z + dz * speed;
 
+  // Calculate movement velocity for rotation
+  const movementVelocity = new THREE.Vector3(dx * speed / delta, 0, dz * speed / delta);
+  
+  // Apply rotation based on movement
+  if (len > 0) {
+    updateBallRotationFromVelocity(movementVelocity, delta);
+  } else {
+    // Gradually stop rotation when not moving
+    ballAngularVelocity.multiplyScalar(0.95);
+    updateBallRotationDuringFlight(delta);
+  }
+
   // Boundaries
   x = Math.max(-courtHalfLength + 1, Math.min(courtHalfLength - 1, x));
   z = Math.max(-courtHalfWidth + 1,  Math.min(courtHalfWidth - 1, z));
@@ -933,11 +1043,20 @@ function handleIdleMovement(delta) {
 
 function resetBallPosition() {
   if (ballMesh) {
+    // Force reset position to center court
     ballMesh.position.set(0, 0.4, 0);
     ballVelocity.set(0, 0, 0);
+    ballAngularVelocity.set(0, 0, 0); // Reset rotation
     ballInFlight = false;
     shotPower = 50;
     updatePowerUI();
+    
+    // Reset ball orientation
+    if (ballSphere) {
+      ballSphere.rotation.set(0, 0, 0);
+    }
+    
+    console.log("Ball position reset to center court");
   }
 }
 
