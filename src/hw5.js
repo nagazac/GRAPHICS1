@@ -54,6 +54,20 @@ scene.add(spotLight3);
 
 renderer.shadowMap.enabled = true;
 
+//HW6 global variables and setup:
+let move = { left: false, right: false, forward: false, back: false };
+const moveSpeed = 0.2;  // adjust as needed
+let ballMesh;           // will store basketball reference
+const courtHalfLength = 15; 
+const courtHalfWidth  = 7.5;
+const clock = new THREE.Clock();
+let shotPower = 50;       // starting value (%)
+const powerStep = 5;      // change per key press
+const minPower = 0;
+const maxPower = 100;
+let powerBarElement;      // UI reference
+
+
 function createCourtCanvasTexture(callback) {
   const canvas = document.createElement('canvas');
   canvas.width = 2800; // 28m
@@ -330,11 +344,13 @@ class Basketball {
 }
 
 // Usage — each hemisphere will show one copy of your small texture:
-Basketball.create(scene, { texturePath: '/textures/Basketball.jpg' });
+//Basketball.create(scene, { texturePath: '/textures/Basketball.jpg' });
 
 function addBall() {
-  return Basketball.create(scene);
+  ballMesh = Basketball.create(scene);
+  return ballMesh;
 }
+
 
 function createUIComponents() {
   const overlay = document.createElement('div');
@@ -358,10 +374,39 @@ function createUIComponents() {
 
 function animate() {
   requestAnimationFrame(animate);
+
+  const delta = clock.getDelta(); // seconds since last frame
+
+  // Movement update with frame rate independence
+  if (ballMesh) {
+    let x = ballMesh.position.x;
+    let z = ballMesh.position.z;
+
+    const speed = moveSpeed * delta * 60;  // normalize to ~60FPS baseline
+
+    if (move.left)   x -= speed;
+    if (move.right)  x += speed;
+    if (move.forward) z -= speed;
+    if (move.back)    z += speed;
+
+    // Boundaries
+    x = Math.max(-courtHalfLength + 1, Math.min(courtHalfLength - 1, x));
+    z = Math.max(-courtHalfWidth + 1,  Math.min(courtHalfWidth - 1, z));
+
+    ballMesh.position.set(x, ballMesh.position.y, z);
+  }
+
   controls.enabled = isOrbitEnabled;
   controls.update();
   renderer.render(scene, camera);
 }
+
+function resetBasketball() {
+  if (ballMesh) {
+    ballMesh.position.set(0, 0.4, 0);
+  }
+}
+
 
 const scoreCanvas = document.createElement('canvas');
 scoreCanvas.width  = 512;
@@ -398,8 +443,6 @@ updateScoreCanvas(0, 0);  // valeurs initiales
 
 // charge la texture du logo IDC
 const logoTexture = new THREE.TextureLoader().load('/textures/idc_cup_logo.png');
-
-
 
 
 // — remplacez votre ancienne createJumbotron() par celle-ci —
@@ -454,7 +497,6 @@ function createJumbotron() {
 
   scene.add(group);
 }
-
 
 function createSeatModel(color) {
   const group = new THREE.Group();
@@ -579,8 +621,25 @@ instructionsElement.style.fontFamily = 'Arial, sans-serif';
 instructionsElement.innerHTML = `<h3>Controls:</h3><p>O - Toggle orbit camera</p>`;
 document.body.appendChild(instructionsElement);
 
-document.addEventListener('keydown', e => {
-  if (e.key === "o") isOrbitEnabled = !isOrbitEnabled;
+document.addEventListener('keydown', (e) => {
+  switch (e.key) {
+    case 'o': isOrbitEnabled = !isOrbitEnabled; break;
+    case 'ArrowLeft':  move.left = true;  break;
+    case 'ArrowRight': move.right = true; break;
+    case 'ArrowUp':    move.forward = true; break;
+    case 'ArrowDown':  move.back = true;  break;
+    case "r": case "R": resetBasketball(); break;
+  }
 });
+
+document.addEventListener('keyup', (e) => {
+  switch (e.key) {
+    case 'ArrowLeft':  move.left = false;  break;
+    case 'ArrowRight': move.right = false; break;
+    case 'ArrowUp':    move.forward = false; break;
+    case 'ArrowDown':  move.back = false;  break;
+  }
+});
+
 
 animate();
