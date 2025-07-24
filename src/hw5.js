@@ -91,6 +91,11 @@ let totalShotsMade = 0;
 let currentShotAttempted = false; // Track if current shot was attempted
 let missedShotShown = false; // Prevent multiple miss messages
 
+let helperModeEnabled = false;
+let helperArrow = null;
+let helperCurve = null;
+let helperArrowTip = null;
+
 
 
 function createCourtCanvasTexture(callback) {
@@ -754,6 +759,7 @@ instructionsElement.innerHTML = `
   <p>Spacebar - Shoot ball toward nearest hoop</p>
   <p>R - Reset ball position</p>
   <p>C - Clear scores</p>
+  <p>H - Toggle helper mode (shows shot direction)</p>
 `;
 document.body.appendChild(instructionsElement);
 
@@ -796,6 +802,15 @@ document.addEventListener('keydown', (e) => {
     case 'o':
     case 'O':
       isOrbitEnabled = !isOrbitEnabled;
+      break;
+
+    case 'h':
+    case 'H':
+      helperModeEnabled = !helperModeEnabled;
+      if (!helperModeEnabled && helperArrow) {
+        scene.remove(helperArrow);
+        helperArrow = null;
+      }
       break;
   }
 });
@@ -930,62 +945,79 @@ function animate() {
       // Gravity
       ballVelocity.y += gravity * delta;
 
-      // Position update
+      // Update position
       ballMesh.position.addScaledVector(ballVelocity, delta);
 
-      // Update ball rotation during flight
+      // Rotation pendant le vol
       updateBallRotationDuringFlight(delta);
 
-      // Check hoop collisions
+      // Collisions
       checkBackboardCollision(leftHoop);
       checkBackboardCollision(rightHoop);
       checkRimCollision(leftHoop, 0);
       checkRimCollision(rightHoop, 1);
 
-      // Ground collision with improved bouncing
+      // Rebond au sol
       const ballRadius = 0.4;
       if (ballMesh.position.y <= ballRadius) {
         ballMesh.position.y = ballRadius;
-        
-        // Improved bouncing with more realistic physics
+
         if (Math.abs(ballVelocity.y) > 0.8) {
-          ballVelocity.y = -ballVelocity.y * 0.65; // More realistic bounce
-          ballVelocity.x *= 0.85; // Less horizontal slowdown
+          ballVelocity.y = -ballVelocity.y * 0.65;
+          ballVelocity.x *= 0.85;
           ballVelocity.z *= 0.85;
-          
-          // Add slight random variation for realism
           ballVelocity.x += (Math.random() - 0.5) * 0.3;
           ballVelocity.z += (Math.random() - 0.5) * 0.3;
-          
-          // Update rotation after bounce
           updateBallRotationFromVelocity(ballVelocity, delta);
         } else if (Math.abs(ballVelocity.y) > 0.3) {
-          ballVelocity.y = -ballVelocity.y * 0.4; // Smaller bounces
+          ballVelocity.y = -ballVelocity.y * 0.4;
           ballVelocity.x *= 0.9;
           ballVelocity.z *= 0.9;
-          
-          // Update rotation after bounce
           updateBallRotationFromVelocity(ballVelocity, delta);
         } else {
           resetBallPosition();
         }
       }
-      
-      // Court boundaries - ball stops if it goes too far
+
+      // Limites terrain
       const maxDistance = 20;
       if (Math.abs(ballMesh.position.x) > maxDistance || Math.abs(ballMesh.position.z) > maxDistance) {
         resetBallPosition();
       }
-      
-      // Check if ball has been in flight too long without scoring (missed shot)
-      if (ballInFlight && ballMesh.position.y < 0.5 && ballVelocity.y < 0 && 
-          currentShotAttempted && !hasScored && !missedShotShown) {
-        // Ball is low and falling - likely a miss
-        missedShotShown = true; // Prevent multiple miss messages
+
+      // Missed shot feedback
+      if (
+        ballInFlight &&
+        ballMesh.position.y < 0.5 &&
+        ballVelocity.y < 0 &&
+        currentShotAttempted &&
+        !hasScored &&
+        !missedShotShown
+      ) {
+        missedShotShown = true;
         showShotFeedback("MISSED SHOT", false);
       }
+
+      // Supprimer helper si balle en vol
+      if (helperCurve) {
+        scene.remove(helperCurve);
+        helperCurve.geometry.dispose();
+        helperCurve.material.dispose();
+        helperCurve = null;
+      }
+      if (helperArrowTip) {
+        scene.remove(helperArrowTip);
+        helperArrowTip = null;
+      }
+
     } else {
-      handleIdleMovement(delta); // arrow keys
+      // Idle movement
+      handleIdleMovement(delta);
+
+      // Helper mode actif
+      if (helperModeEnabled) {
+        updateHelperArrow();
+      }
     }
   }
 
@@ -1038,6 +1070,10 @@ function shootBall() {
   setBallRotationFromShot(ballVelocity);
 
   ballInFlight = true;
+  if (helperArrow) {
+    scene.remove(helperArrow);
+    helperArrow = null;
+  }
   hasScored = false; // Reset scoring flag for new shot
 }
 
@@ -1172,9 +1208,137 @@ function resetBallPosition() {
     if (ballSphere) {
       ballSphere.rotation.set(0, 0, 0);
     }
+
+    if (helperArrow) {
+      scene.remove(helperArrow);
+      helperArrow = null;
+    }
     
     console.log("Ball position reset to center court");
   }
+}
+
+function createGradientMaterial() {
+  return new THREE.ShaderMaterial({
+    vertexShader: `
+      varying float vPos;
+      void main() {
+        vPos = position.y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying float vPos;
+      void main() {
+        float t = clamp(vPos / 10.0, 0.0, 1.0); // Normalise la hauteur
+        vec3 green = vec3(0.0, 1.0, 0.0);
+        vec3 red = vec3(1.0, 0.0, 0.0);
+        vec3 color = mix(green, red, t);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    transparent: false
+  });
+}
+
+function updateHelperArrow() {
+  if (!helperModeEnabled || !ballMesh || !leftHoop || !rightHoop || ballInFlight) return;
+
+  // Nettoyage précédent
+  if (helperCurve) {
+    scene.remove(helperCurve);
+    helperCurve.geometry.dispose();
+    helperCurve.material.dispose();
+    helperCurve = null;
+  }
+  if (helperArrowTip) {
+    scene.remove(helperArrowTip);
+    helperArrowTip = null;
+  }
+
+  // Choix du panier
+  const leftRimPos = new THREE.Vector3();
+  const rightRimPos = new THREE.Vector3();
+  leftHoop.userData.rim.getWorldPosition(leftRimPos);
+  rightHoop.userData.rim.getWorldPosition(rightRimPos);
+
+  const distLeft = ballMesh.position.distanceTo(leftRimPos);
+  const distRight = ballMesh.position.distanceTo(rightRimPos);
+  const target = distLeft < distRight ? leftRimPos : rightRimPos;
+
+  // Direction horizontale
+  const direction = new THREE.Vector3(
+    target.x - ballMesh.position.x,
+    0,
+    target.z - ballMesh.position.z
+  ).normalize();
+
+  // Vitesse comme dans shootBall()
+  const angle = THREE.MathUtils.degToRad(70);
+  const horizontalSpeed = 2 + (shotPower / 100) * 2.7;
+  const verticalSpeed = Math.tan(angle) * horizontalSpeed;
+
+  const velocity = direction.clone().multiplyScalar(horizontalSpeed);
+  velocity.y = verticalSpeed;
+
+  const start = ballMesh.position.clone();
+  const points = computeTrajectoryPoints(start, velocity, gravity, 60, 0.06);
+
+  if (points.length < 2) return;
+
+  const curve = new THREE.CatmullRomCurve3(points);
+  const tubeGeometry = new THREE.TubeGeometry(curve, 50, 0.05, 8, false);
+  const tubeMaterial = createGradientMaterial();
+  helperCurve = new THREE.Mesh(tubeGeometry, tubeMaterial);
+  scene.add(helperCurve);
+
+  // Arrow head at end
+  const pEnd = points[points.length - 1];
+  const pBefore = points[points.length - 2] || start;
+  const dir = pEnd.clone().sub(pBefore).normalize();
+  const arrowLength = 0.6;
+  helperArrowTip = new THREE.ArrowHelper(dir, pEnd, arrowLength, 0xffffff, 0.3, 0.2);
+  scene.add(helperArrowTip);
+}
+
+function computeTrajectoryPoints(origin, velocity, gravity = -9.8, steps = 50, dt = 0.1) {
+  const points = [];
+  const pos = origin.clone();
+  const vel = velocity.clone();
+
+  const targetRim = (leftHoop && rightHoop)
+    ? (origin.distanceTo(leftHoop.userData.rim.position) < origin.distanceTo(rightHoop.userData.rim.position)
+        ? leftHoop.userData.rim
+        : rightHoop.userData.rim)
+    : null;
+
+  let rimPos = new THREE.Vector3();
+  if (targetRim) {
+    targetRim.getWorldPosition(rimPos);
+  }
+
+  for (let i = 0; i < steps; i++) {
+    points.push(pos.clone());
+
+    // Check if we enter the net area
+    if (targetRim) {
+      const dx = pos.x - rimPos.x;
+      const dz = pos.z - rimPos.z;
+      const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+
+      const isInsideHoop = horizontalDist < 0.35 && pos.y <= rimPos.y + 0.05 && vel.y < 0;
+
+      if (isInsideHoop) break;
+    }
+
+    vel.y += gravity * dt;
+    pos.addScaledVector(vel, dt);
+
+    // Stop if hits ground
+    if (pos.y < 0.1) break;
+  }
+
+  return points;
 }
 
 animate();
