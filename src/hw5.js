@@ -59,7 +59,7 @@ renderer.shadowMap.enabled = true;
 
 //HW6 global variables and setup:
 let move = { left: false, right: false, forward: false, back: false };
-const moveSpeed = 0.2;  // adjust as needed
+const moveSpeed = 0.1;  // adjust as needed
 let ballMesh;           // will store basketball reference
 const courtHalfLength = 15; 
 const courtHalfWidth  = 7.5;
@@ -84,6 +84,12 @@ const rotationDamping = 0.98; // Rotation gradually slows down
 // Add collision detection variables
 let homeScore = 0;
 let awayScore = 0;
+
+// Statistics tracking variables
+let totalShotAttempts = 0;
+let totalShotsMade = 0;
+let currentShotAttempted = false; // Track if current shot was attempted
+let missedShotShown = false; // Prevent multiple miss messages
 
 
 
@@ -435,6 +441,18 @@ function createUIComponents() {
       </div>
       <div id="power-value" style="text-align:right; font-size:12px; margin-top:2px;">50%</div>
     </div>
+    <div style="margin-top:12px; border-top: 1px solid #555; padding-top: 8px;">
+      <h3 style="margin:0 0 6px; font-size:14px;">Statistics</h3>
+      <div style="display:flex; justify-content:space-between; font-size:12px;">
+        <span>Attempts:</span><span id="shot-attempts">0</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:2px;">
+        <span>Made:</span><span id="shots-made">0</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:2px;">
+        <span>Percentage:</span><span id="shooting-percentage">0%</span>
+      </div>
+    </div>
   `;
   overlay.appendChild(score);
 
@@ -449,6 +467,71 @@ function updatePowerUI() {
   const percentage = shotPower;
   powerBarElement.fill.style.width = percentage + '%';
   powerBarElement.value.textContent = percentage + '%';
+}
+
+function updateStatisticsUI() {
+  const attemptsElement = document.getElementById('shot-attempts');
+  const madeElement = document.getElementById('shots-made');
+  const percentageElement = document.getElementById('shooting-percentage');
+  
+  if (attemptsElement) attemptsElement.textContent = totalShotAttempts;
+  if (madeElement) madeElement.textContent = totalShotsMade;
+  
+  const percentage = totalShotAttempts > 0 ? 
+    Math.round((totalShotsMade / totalShotAttempts) * 100) : 0;
+  if (percentageElement) percentageElement.textContent = percentage + '%';
+}
+
+function showShotFeedback(message, isSuccess = false) {
+  // Remove existing feedback message if any
+  const existingMessage = document.getElementById('shot-feedback');
+  if (existingMessage) {
+    existingMessage.remove();
+  }
+  
+  // Create new feedback message
+  const feedbackElement = document.createElement('div');
+  feedbackElement.id = 'shot-feedback';
+  feedbackElement.textContent = message;
+  
+  Object.assign(feedbackElement.style, {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    fontSize: '32px',
+    fontWeight: 'bold',
+    fontFamily: 'Arial, sans-serif',
+    color: isSuccess ? '#00ff00' : '#ff4444',
+    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+    zIndex: '1000',
+    pointerEvents: 'none',
+    animation: 'fadeInOut 2s ease-in-out'
+  });
+  
+  // Add CSS animation
+  if (!document.getElementById('feedback-styles')) {
+    const style = document.createElement('style');
+    style.id = 'feedback-styles';
+    style.textContent = `
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+        20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  document.body.appendChild(feedbackElement);
+  
+  // Remove message after animation
+  setTimeout(() => {
+    if (feedbackElement.parentNode) {
+      feedbackElement.remove();
+    }
+  }, 2000);
 }
 
 const scoreCanvas = document.createElement('canvas');
@@ -700,12 +783,15 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'c':
     case 'C':
-      // Reset scores
+      // Reset scores and statistics
       homeScore = 0;
       awayScore = 0;
+      totalShotAttempts = 0;
+      totalShotsMade = 0;
       updateScoreCanvas(homeScore, awayScore);
       document.getElementById('home-score').textContent = homeScore;
       document.getElementById('away-score').textContent = awayScore;
+      updateStatisticsUI();
       break;
     case 'o':
     case 'O':
@@ -812,6 +898,7 @@ function checkRimCollision(hoop, hoopIndex) {
   if (heightDiff < 0.2 && horizontalDist < 0.35 && ballVelocity.y < -1 && !hasScored) {
     // Score! (only once per shot)
     hasScored = true; // Prevent multiple scoring
+    totalShotsMade++; // Increment successful shots
     
     if (hoopIndex === 0) { // Left hoop
       awayScore += 2;
@@ -824,12 +911,13 @@ function checkRimCollision(hoop, hoopIndex) {
     document.getElementById('home-score').textContent = homeScore;
     document.getElementById('away-score').textContent = awayScore;
     
+    // Update statistics and show success feedback
+    updateStatisticsUI();
+    showShotFeedback("SHOT MADE!", true);
+    
     console.log(`SCORE! Home: ${homeScore}, Away: ${awayScore}`);
     
-    // Reset ballInFlight after scoring with a small delay
-    setTimeout(() => {
-      ballInFlight = false;
-    }, 1500); // 1.5 second delay to see the score
+    // Don't stop ballInFlight here - let ball continue naturally
   }
 }
 
@@ -879,21 +967,22 @@ function animate() {
           // Update rotation after bounce
           updateBallRotationFromVelocity(ballVelocity, delta);
         } else {
-          // Stop bouncing when velocity is too low
-          ballVelocity.set(0, 0, 0);
-          ballAngularVelocity.set(0, 0, 0); // Stop rotation too
-          ballInFlight = false;
-          hasScored = false; // Reset scoring flag
+          resetBallPosition();
         }
       }
       
       // Court boundaries - ball stops if it goes too far
       const maxDistance = 20;
       if (Math.abs(ballMesh.position.x) > maxDistance || Math.abs(ballMesh.position.z) > maxDistance) {
-        ballVelocity.set(0, 0, 0);
-        ballAngularVelocity.set(0, 0, 0); // Stop rotation too
-        ballInFlight = false;
-        hasScored = false; // Reset scoring flag
+        resetBallPosition();
+      }
+      
+      // Check if ball has been in flight too long without scoring (missed shot)
+      if (ballInFlight && ballMesh.position.y < 0.5 && ballVelocity.y < 0 && 
+          currentShotAttempted && !hasScored && !missedShotShown) {
+        // Ball is low and falling - likely a miss
+        missedShotShown = true; // Prevent multiple miss messages
+        showShotFeedback("MISSED SHOT", false);
       }
     } else {
       handleIdleMovement(delta); // arrow keys
@@ -907,6 +996,12 @@ function animate() {
 
 function shootBall() {
   if (!ballMesh || !leftHoop || !rightHoop) return;
+
+  // Track shot attempt
+  totalShotAttempts++;
+  currentShotAttempted = true;
+  missedShotShown = false; // Reset miss message flag for new shot
+  updateStatisticsUI();
 
   // Get rim world positions
   const leftRimPos = new THREE.Vector3();
@@ -951,25 +1046,34 @@ function updateBallRotationFromVelocity(velocity, delta) {
   if (!ballSphere) return;
   
   const ballRadius = 0.3;
+  const velocityMagnitude = velocity.length();
   
-  // Calculate angular velocity based on linear velocity
-  // For a rolling ball: ω = v / r (angular velocity = linear velocity / radius)
-  const angularSpeed = velocity.length() / ballRadius;
-  
-  if (angularSpeed > 0.01) { // Only rotate if moving fast enough
+  // Only rotate if moving fast enough and reduce sensitivity for slow movements
+  if (velocityMagnitude > 0.005) { 
+    // Calculate angular velocity based on linear velocity
+    // For a rolling ball: ω = v / r (angular velocity = linear velocity / radius)
+    const angularSpeed = velocityMagnitude / ballRadius;
+    
     // Calculate rotation axis perpendicular to velocity (for rolling motion)
+    const velocityNormalized = velocity.clone().normalize();
     const rotationAxis = new THREE.Vector3();
     
     // For rolling motion, rotation axis is perpendicular to both velocity and up vector
-    rotationAxis.crossVectors(velocity.clone().normalize(), new THREE.Vector3(0, 1, 0));
-    rotationAxis.normalize();
+    // This ensures the ball rotates in the correct direction relative to movement
+    rotationAxis.crossVectors(velocityNormalized, new THREE.Vector3(0, 1, 0));
+    rotationAxis.negate(); // Reverse direction to match desired rolling direction
     
-    // Apply rotation
-    const rotationAmount = angularSpeed * delta;
-    ballSphere.rotateOnAxis(rotationAxis, rotationAmount);
-    
-    // Store angular velocity for continued rotation during flight
-    ballAngularVelocity.copy(rotationAxis.multiplyScalar(angularSpeed));
+    // Check if we have a valid rotation axis (avoid zero vector)
+    if (rotationAxis.length() > 0.001) {
+      rotationAxis.normalize();
+      
+      // Apply rotation with reduced intensity for idle movement
+      const rotationAmount = angularSpeed * delta;
+      ballSphere.rotateOnAxis(rotationAxis, rotationAmount);
+      
+      // Store angular velocity for continued rotation during flight
+      ballAngularVelocity.copy(rotationAxis.multiplyScalar(angularSpeed));
+    }
   }
 }
 
@@ -1027,15 +1131,15 @@ function handleIdleMovement(delta) {
   let x = ballMesh.position.x + dx * speed;
   let z = ballMesh.position.z + dz * speed;
 
-  // Calculate movement velocity for rotation
-  const movementVelocity = new THREE.Vector3(dx * speed / delta, 0, dz * speed / delta);
+  // Calculate movement velocity for rotation (reduced for idle movement)
+  const movementVelocity = new THREE.Vector3(dx * speed / delta * 0.3, 0, dz * speed / delta * 0.3);
   
   // Apply rotation based on movement
   if (len > 0) {
     updateBallRotationFromVelocity(movementVelocity, delta);
   } else {
-    // Gradually stop rotation when not moving
-    ballAngularVelocity.multiplyScalar(0.8);
+    // Gradually stop rotation when not moving (faster decay for idle)
+    ballAngularVelocity.multiplyScalar(0.9);
     updateBallRotationDuringFlight(delta);
   }
 
@@ -1048,12 +1152,19 @@ function handleIdleMovement(delta) {
 
 function resetBallPosition() {
   if (ballMesh) {
+    // Check if shot was attempted but missed (show miss feedback only if not already shown)
+    if (currentShotAttempted && ballInFlight && !hasScored && !missedShotShown) {
+      showShotFeedback("MISSED SHOT", false);
+    }
+    
     // Force reset position to center court
     ballMesh.position.set(0, 0.4, 0);
     ballVelocity.set(0, 0, 0);
     ballAngularVelocity.set(0, 0, 0); // Reset rotation
     ballInFlight = false;
     hasScored = false; // Reset scoring flag
+    currentShotAttempted = false; // Reset shot attempt flag
+    missedShotShown = false; // Reset miss message flag
     shotPower = 50;
     updatePowerUI();
     
