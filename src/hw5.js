@@ -73,6 +73,7 @@ let leftHoop, rightHoop;
 // --- Shooting & Physics ---
 let ballVelocity = new THREE.Vector3(0, 0, 0);
 let ballInFlight = false;
+let hasScored = false; // Prevent multiple scoring for same shot
 const gravity = -9.8; // m/s² (scaled for scene)
 
 // --- Ball Rotation ---
@@ -808,8 +809,10 @@ function checkRimCollision(hoop, hoopIndex) {
   }
   
   // Score detection - ball passes through rim from above
-  if (heightDiff < 0.2 && horizontalDist < 0.35 && ballVelocity.y < -1) {
-    // Score!
+  if (heightDiff < 0.2 && horizontalDist < 0.35 && ballVelocity.y < -1 && !hasScored) {
+    // Score! (only once per shot)
+    hasScored = true; // Prevent multiple scoring
+    
     if (hoopIndex === 0) { // Left hoop
       awayScore += 2;
     } else { // Right hoop  
@@ -823,8 +826,7 @@ function checkRimCollision(hoop, hoopIndex) {
     
     console.log(`SCORE! Home: ${homeScore}, Away: ${awayScore}`);
     
-    
-    // Reset ballInFLight after scoring with a small delay
+    // Reset ballInFlight after scoring with a small delay
     setTimeout(() => {
       ballInFlight = false;
     }, 1500); // 1.5 second delay to see the score
@@ -881,6 +883,7 @@ function animate() {
           ballVelocity.set(0, 0, 0);
           ballAngularVelocity.set(0, 0, 0); // Stop rotation too
           ballInFlight = false;
+          hasScored = false; // Reset scoring flag
         }
       }
       
@@ -890,6 +893,7 @@ function animate() {
         ballVelocity.set(0, 0, 0);
         ballAngularVelocity.set(0, 0, 0); // Stop rotation too
         ballInFlight = false;
+        hasScored = false; // Reset scoring flag
       }
     } else {
       handleIdleMovement(delta); // arrow keys
@@ -939,6 +943,7 @@ function shootBall() {
   setBallRotationFromShot(ballVelocity);
 
   ballInFlight = true;
+  hasScored = false; // Reset scoring flag for new shot
 }
 
 // Ball rotation functions
@@ -1030,7 +1035,7 @@ function handleIdleMovement(delta) {
     updateBallRotationFromVelocity(movementVelocity, delta);
   } else {
     // Gradually stop rotation when not moving
-    ballAngularVelocity.multiplyScalar(0.95);
+    ballAngularVelocity.multiplyScalar(0.8);
     updateBallRotationDuringFlight(delta);
   }
 
@@ -1048,6 +1053,7 @@ function resetBallPosition() {
     ballVelocity.set(0, 0, 0);
     ballAngularVelocity.set(0, 0, 0); // Reset rotation
     ballInFlight = false;
+    hasScored = false; // Reset scoring flag
     shotPower = 50;
     updatePowerUI();
     
