@@ -807,9 +807,22 @@ document.addEventListener('keydown', (e) => {
     case 'h':
     case 'H':
       helperModeEnabled = !helperModeEnabled;
-      if (!helperModeEnabled && helperArrow) {
-        scene.remove(helperArrow);
-        helperArrow = null;
+      if (!helperModeEnabled) {
+        // Clean up all helper elements when disabling
+        if (helperArrow) {
+          scene.remove(helperArrow);
+          helperArrow = null;
+        }
+        if (helperCurve) {
+          scene.remove(helperCurve);
+          helperCurve.geometry.dispose();
+          helperCurve.material.dispose();
+          helperCurve = null;
+        }
+        if (helperArrowTip) {
+          scene.remove(helperArrowTip);
+          helperArrowTip = null;
+        }
       }
       break;
   }
@@ -1168,7 +1181,7 @@ function handleIdleMovement(delta) {
   let z = ballMesh.position.z + dz * speed;
 
   // Calculate movement velocity for rotation (reduced for idle movement)
-  const movementVelocity = new THREE.Vector3(dx * speed / delta * 0.3, 0, dz * speed / delta * 0.3);
+  const movementVelocity = new THREE.Vector3(dx * speed / delta * 0.15, 0, dz * speed / delta * 0.15);
   
   // Apply rotation based on movement
   if (len > 0) {
@@ -1242,9 +1255,7 @@ function createGradientMaterial() {
 }
 
 function updateHelperArrow() {
-  if (!helperModeEnabled || !ballMesh || !leftHoop || !rightHoop || ballInFlight) return;
-
-  // Nettoyage précédent
+  // Clean up previous helper elements first
   if (helperCurve) {
     scene.remove(helperCurve);
     helperCurve.geometry.dispose();
@@ -1255,6 +1266,9 @@ function updateHelperArrow() {
     scene.remove(helperArrowTip);
     helperArrowTip = null;
   }
+
+  // Exit early if helper mode is disabled or conditions aren't met
+  if (!helperModeEnabled || !ballMesh || !leftHoop || !rightHoop || ballInFlight) return;
 
   // Choix du panier
   const leftRimPos = new THREE.Vector3();
